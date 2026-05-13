@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Life Simulator</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Ibarra+Real+Nova:ital,wght@0,400;0,700;1,400;1,700&family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app">
+    <div id="gameLayer">
+      <div id="progress" aria-label="Progress bar"></div>
+
+      <aside id="taskList" aria-label="Task List">
+        <h2 class="task-header">// OBJECTIVES</h2>
+        <ul id="tasks"></ul>
+      </aside>
+
+      <main id="center">
+        <div id="stageLabel"></div>
+        <p id="prompt"></p>
+        <div id="options"></div>
+        <div id="subtext"></div>
+      </main>
+    </div>
+
+    <div id="warningLayer" aria-hidden="true"></div>
+    <div id="staticOverlay" aria-hidden="true"></div>
+
+    <section id="taskModal" aria-hidden="true">
+      <div class="task-modal-panel">
+        <div class="modal-top">
+          <h3 class="modal-title" id="modalTitle">Task Simulation</h3>
+          <button id="closeModal" class="modal-close" type="button">[ CLOSE ]</button>
+        </div>
+        <div id="modalBody"></div>
+      </div>
+    </section>
+
+    <section id="treeReveal" aria-hidden="true">
+      <svg id="treeCanvas" viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid slice"></svg>
+      <div id="finalMessage">
+        <p class="final-line-1">Life isn't linear.</p>
+        <p class="final-line-2">You were never behind.</p>
+        <p class="final-line-3"></p>
+        <p class="final-line-4">Live life as your own.</p>
+        <p class="final-line-5"></p>
+      </div>
+    </section>
+  </div>
+
+  <script src="index.js"></script>
+</body>
+</html>

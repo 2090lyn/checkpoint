@@ -1,0 +1,695 @@
+@import url('https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=Ibarra+Real+Nova:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
+:root {
+    --bg: #080808;
+    --text: #e8e8e8;
+    --blue: #2233ff;
+    --blue-dim: rgba(34, 51, 255, 0.18);
+    --blue-glow: rgba(34, 51, 255, 0.5);
+    --red: #ff2222;
+    --warm: #ffd7a6;
+    --panel: rgba(255, 255, 255, 0.05);
+    --panel-border: rgba(255, 255, 255, 0.2);
+    --glow: 0 0 10px rgba(255, 255, 255, 0.3);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    font-family: "VT323", monospace;
+    font-size: 18px;
+}
+
+/* ── SCANLINES ────────────────────────────────────── */
+#app::before {
+    content: "";
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(
+        to bottom,
+        transparent 0px,
+        transparent 2px,
+        rgba(0,0,0,0.08) 2px,
+        rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 100;
+}
+
+/* ── VIGNETTE ─────────────────────────────────────── */
+#app::after {
+    content: "";
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.75) 100%);
+    pointer-events: none;
+    z-index: 99;
+}
+
+#app {
+    position: relative;
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+}
+
+#gameLayer {
+    position: relative;
+    width: 100%; height: 100%;
+}
+
+/* ── PROGRESS ─────────────────────────────────────── */
+#progress {
+    position: fixed;
+    top: 18px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 12;
+    display: flex; align-items: center; gap: 6px;
+    font-family: "Press Start 2P", monospace;
+    font-size: clamp(8px, 1vw, 11px);
+    letter-spacing: 1px;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.dash { opacity: 0.4; color: #fff; }
+
+.node {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.5);
+    background: transparent;
+    transition: background 300ms ease, border-color 300ms ease, box-shadow 300ms ease;
+}
+
+.node.filled {
+    background: #fff;
+    border-color: #fff;
+    box-shadow: 0 0 8px rgba(255,255,255,0.9), 0 0 20px rgba(255,255,255,0.4);
+}
+
+/* ── TASK LIST ────────────────────────────────────── */
+#taskList {
+    position: fixed;
+    top: 22px; right: 22px;
+    width: min(260px, calc(100vw - 30px));
+    z-index: 12;
+    background: rgba(0,0,0,0.85);
+    border: 1px solid var(--panel-border);
+    border-left: 3px solid rgba(255,255,255,0.6);
+    padding: 12px 12px 10px;
+}
+
+.task-header {
+    font-family: "Press Start 2P", monospace;
+    font-size: 0.45rem;
+    letter-spacing: 2px;
+    opacity: 0.7;
+    margin-bottom: 10px;
+    color: #aaa;
+}
+
+#tasks {
+    list-style: none;
+    display: grid;
+    gap: 6px;
+}
+
+.task {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 0.9rem;
+    padding-bottom: 5px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    animation: taskPulse 3s ease-in-out infinite;
+}
+
+.task:last-child { border-bottom: 0; padding-bottom: 0; }
+
+.task-check {
+    width: 14px; height: 14px;
+    border: 1px solid rgba(255,255,255,0.5);
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    font-size: 0.75rem;
+    color: #9ef3b0;
+    flex-shrink: 0;
+}
+
+.task-label {
+    appearance: none; border: 0; padding: 0;
+    background: transparent; color: inherit;
+    font: inherit; cursor: pointer; text-align: left;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+    opacity: 0.9;
+}
+
+.task-label:hover { color: #c8d4ff; }
+
+.task-completed { animation: none; opacity: 0.6; }
+.task-completed .task-label { text-decoration: line-through; cursor: default; opacity: 0.7; }
+.task-completed .task-check { background: rgba(158,243,176,0.15); border-color: #9ef3b0; }
+
+.task-time {
+    min-width: 50px;
+    margin-left: auto;
+    text-align: right;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #fff;
+}
+
+/* ── CENTER STAGE ─────────────────────────────────── */
+#center {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 80px 24px 24px;
+    text-align: center;
+    z-index: 8;
+    transition: transform 300ms ease, filter 300ms ease, opacity 300ms ease;
+    gap: 16px;
+}
+
+#stageLabel {
+    font-family: "Press Start 2P", monospace;
+    font-size: clamp(0.45rem, 0.9vw, 0.6rem);
+    letter-spacing: 4px;
+    color: rgba(255,255,255,0.35);
+    text-transform: uppercase;
+    min-height: 1.2em;
+    transition: opacity 400ms ease;
+}
+
+#prompt {
+    max-width: 680px;
+    font-family: "Press Start 2P", monospace;
+    font-size: clamp(0.55rem, 1vw, 0.72rem);
+    line-height: 2;
+    letter-spacing: 0.5px;
+    border: 2px solid rgba(255,255,255,0.8);
+    box-shadow: 4px 4px 0 #000, 0 0 30px rgba(255,255,255,0.08);
+    background: rgba(0,0,0,0.92);
+    padding: 20px 22px;
+    text-align: left;
+    position: relative;
+}
+
+/* typewriter cursor blink on prompt */
+#prompt::after {
+    content: "▮";
+    display: inline-block;
+    animation: blink 1s step-end infinite;
+    margin-left: 4px;
+    opacity: 0.7;
+}
+
+#subtext {
+    font-family: "VT323", monospace;
+    font-size: clamp(0.9rem, 1.5vw, 1.1rem);
+    color: rgba(255,255,255,0.35);
+    letter-spacing: 1px;
+    min-height: 1.4em;
+    font-style: italic;
+    transition: opacity 600ms ease;
+}
+
+#options {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+}
+
+/* ── BUTTONS ──────────────────────────────────────── */
+.choice {
+    appearance: none;
+    border: 2px solid rgba(255,255,255,0.55);
+    background: rgba(0,0,180,0.2);
+    color: #d8deff;
+    padding: 10px 18px;
+    min-width: 180px;
+    font-family: "Press Start 2P", monospace;
+    font-size: 0.5rem;
+    line-height: 1.7;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    box-shadow: 3px 3px 0 #000;
+    transition: transform 80ms ease, background 120ms ease, box-shadow 80ms ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.choice::before {
+    content: "> ";
+    opacity: 0;
+    transition: opacity 100ms;
+}
+
+.choice:hover::before, .choice:focus-visible::before { opacity: 1; }
+
+.choice:hover, .choice:focus-visible {
+    background: rgba(0,0,200,0.45);
+    transform: translate(-2px, -2px);
+    box-shadow: 5px 5px 0 #000, 0 0 15px var(--blue-glow);
+    outline: none;
+    color: #fff;
+    border-color: #fff;
+}
+
+.choice:active {
+    transform: translate(1px, 1px);
+    box-shadow: 2px 2px 0 #000;
+}
+
+/* The one "correct" forced choice gets a subtle blue tint */
+.choice.forced {
+    border-color: var(--blue);
+    color: #aabbff;
+}
+
+/* ── WARNINGS ─────────────────────────────────────── */
+#warningLayer {
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 50;
+}
+
+.warning {
+    position: fixed;
+    color: var(--red);
+    font-family: "Press Start 2P", monospace;
+    font-size: 0.55rem;
+    line-height: 1.6;
+    border: 2px solid rgba(255,34,34,0.8);
+    padding: 8px 10px;
+    background: rgba(0,0,0,0.92);
+    white-space: nowrap;
+    max-width: min(88vw, 420px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    animation: warningPop 1600ms ease forwards;
+    text-transform: uppercase;
+    box-shadow: 3px 3px 0 #000, 0 0 12px rgba(255,0,0,0.4);
+}
+
+/* ── STATIC OVERLAY ───────────────────────────────── */
+#staticOverlay {
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 60;
+    opacity: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+    background-size: 150px 150px;
+    mix-blend-mode: overlay;
+    transition: opacity 200ms;
+}
+
+/* ── MODAL ────────────────────────────────────────── */
+#taskModal {
+    position: fixed; inset: 0; z-index: 80;
+    display: none; align-items: center; justify-content: center;
+    padding: 16px;
+    background: rgba(0,0,0,0.78);
+}
+
+#taskModal.open { display: flex; }
+
+.task-modal-panel {
+    width: min(760px, 96vw);
+    max-height: 88vh;
+    overflow: auto;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-left: 4px solid rgba(255,255,255,0.7);
+    background: rgba(4,4,4,0.97);
+    box-shadow: 6px 6px 0 #000, 0 0 40px rgba(255,255,255,0.1);
+    padding: 18px;
+}
+
+.modal-top {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    gap: 10px; margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+}
+
+.modal-title {
+    font-family: "Press Start 2P", monospace;
+    font-size: 0.6rem; letter-spacing: 1px;
+}
+
+.modal-close {
+    appearance: none;
+    border: 1px solid rgba(255,255,255,0.4);
+    background: transparent; color: #fff;
+    padding: 6px 10px;
+    font-family: "Press Start 2P", monospace;
+    font-size: 0.45rem;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 #000;
+}
+
+.modal-close:hover { background: rgba(255,255,255,0.1); }
+
+/* ── PAPER FORMS ──────────────────────────────────── */
+.sim-box { margin: 10px 0; }
+
+.paper {
+    background: #f7f5f0;
+    color: #111;
+    border: 1px solid #c8c4bc;
+    box-shadow: 0 14px 40px rgba(0,0,0,0.6), 4px 4px 0 rgba(0,0,0,0.3);
+    padding: 18px;
+    text-shadow: none;
+    font-family: Arial, Helvetica, sans-serif;
+    position: relative;
+}
+
+.paper::before {
+    content: "";
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #2233ff, #0011cc);
+}
+
+.doc-header {
+    display: flex; justify-content: space-between;
+    margin-bottom: 10px; padding-bottom: 8px;
+    border-bottom: 1px solid #ddd;
+    font-size: 0.75rem; color: #444;
+    font-family: Arial, sans-serif;
+}
+
+.doc-subtle { opacity: 0.5; font-style: italic; }
+
+.text-blur { filter: blur(1.8px); user-select: none; }
+
+.sim-box h4 {
+    margin: 0 0 10px;
+    color: #111;
+    font-size: 0.85rem;
+    letter-spacing: 0.2px;
+    text-transform: uppercase;
+    font-family: Arial, sans-serif;
+}
+
+.paper-line {
+    height: 1px;
+    background: #ddd;
+    margin: 0 0 12px;
+}
+
+.sim-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.sim-field { display: grid; gap: 5px; }
+.sim-field.full { grid-column: 1 / -1; }
+
+.sim-label {
+    font-size: 0.72rem; color: #444;
+    letter-spacing: 0.4px; text-transform: uppercase;
+    font-family: Arial, sans-serif;
+}
+
+.sim-input {
+    width: 100%; background: #fff; color: #111;
+    border: 1px solid #aaa; border-radius: 2px;
+    padding: 7px 8px;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 0.84rem;
+}
+
+.sim-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+.sim-btn {
+    appearance: none;
+    border: 1px solid #1a3acc;
+    background: #2244dd; color: #fff;
+    padding: 8px 12px;
+    font-family: Arial, sans-serif;
+    font-size: 0.8rem; cursor: pointer;
+    border-radius: 2px;
+}
+
+.sim-btn:hover { background: #1a38c8; }
+
+.sim-note {
+    margin: 8px 0 0;
+    font-size: 0.78rem;
+    color: #1a6e2e;
+    font-family: Arial, sans-serif;
+    min-height: 1em;
+}
+
+/* Resume */
+.resume-page {
+    border: 1px solid #bbb; padding: 16px 18px; background: #fdfdfd;
+}
+
+.resume-head {
+    display: flex; justify-content: space-between; gap: 12px;
+    border-bottom: 2px solid #222; padding-bottom: 8px; margin-bottom: 10px;
+}
+
+.resume-head h2 { margin: 0; font-size: 1.8rem; font-weight: 800; }
+
+.resume-contact p {
+    margin: 0; line-height: 1.35; color: #234fb5;
+    font-size: 0.85rem; text-decoration: underline;
+}
+
+.resume-block { margin: 10px 0; }
+
+.resume-block h3 {
+    margin: 0 0 4px; color: #1a4ea0;
+    text-transform: uppercase; font-size: 0.95rem;
+    border-bottom: 1px solid #bbb; padding-bottom: 2px;
+}
+
+.resume-block p { margin: 0 0 4px; font-size: 0.9rem; color: #222; }
+.resume-block ul { margin: 0; padding-left: 18px; }
+.resume-block li { margin: 2px 0; font-size: 0.88rem; color: #222; }
+
+/* Job form */
+.main-job-application-form {
+    font-family: Arial, sans-serif;
+    font-size: 0.88rem;
+    color: #111;
+}
+
+.main-job-application-form label {
+    display: block; margin-bottom: 2px;
+    font-size: 0.78rem; font-weight: bold; color: #333;
+}
+
+.main-job-application-form input[type="text"],
+.main-job-application-form input[type="email"],
+.main-job-application-form input[type="tel"],
+.main-job-application-form select {
+    width: 100%; padding: 6px 8px;
+    border: 1px solid #aaa; font-family: inherit;
+    font-size: 0.85rem; background: #fff; color: #111;
+    margin-bottom: 4px;
+}
+
+.main-job-application-form input[type="radio"] { margin-right: 4px; }
+.main-job-application-form label[for^="exp"] { display: inline; margin-right: 12px; }
+
+.main-job-application-form input[type="submit"],
+.main-job-application-form button {
+    background: #2244dd; color: #fff;
+    border: none; padding: 7px 14px;
+    cursor: pointer; font-size: 0.82rem;
+    font-family: Arial, sans-serif;
+}
+
+/* ── INTRO FORM ───────────────────────────────────── */
+.intro-form {
+    width: min(520px, 90vw);
+    display: grid; gap: 12px;
+}
+
+.intro-input {
+    width: 100%;
+    border: 2px solid rgba(255,255,255,0.5);
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+    padding: 10px 12px;
+    font-family: "VT323", monospace;
+    font-size: 1.2rem;
+    letter-spacing: 1px;
+}
+
+.intro-input:focus-visible {
+    outline: 1px solid #2233ff;
+    box-shadow: 0 0 10px rgba(34,51,255,0.4);
+}
+
+/* ── TREE REVEAL ──────────────────────────────────── */
+#treeReveal {
+    position: fixed; inset: 0; z-index: 4;
+    opacity: 0; pointer-events: none;
+    transition: opacity 1200ms ease;
+    background: #000;
+}
+
+#treeReveal.visible { opacity: 1; pointer-events: all; }
+
+#treeCanvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+}
+
+#finalMessage {
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(90vw, 700px);
+    text-align: center;
+    pointer-events: none;
+}
+
+.final-line-1,
+.final-line-2,
+.final-line-3,
+.final-line-4,
+.final-line-5 {
+    font-family: "Ibarra Real Nova", Georgia, serif;
+    font-style: italic;
+    color: var(--warm);
+    text-shadow: 0 0 20px rgba(255, 215, 166, 0.4);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 1000ms ease, transform 1000ms ease;
+    margin: 0;
+    line-height: 1.6;
+}
+
+.final-line-1 { font-size: clamp(1.4rem, 3.5vw, 2.2rem); transition-delay: 800ms; }
+.final-line-2 { font-size: clamp(1.6rem, 4vw, 2.6rem); font-weight: 700; transition-delay: 1600ms; }
+.final-line-3 { font-size: clamp(1.1rem, 2.5vw, 1.7rem); color: rgba(255,215,166,0.65); transition-delay: 2600ms; margin-top: 1.5rem; }
+.final-line-4 { font-size: clamp(1.1rem, 2.5vw, 1.7rem); color: rgba(255,215,166,0.65); transition-delay: 3400ms; }
+.final-line-5 { font-size: clamp(1.3rem, 3vw, 2rem); transition-delay: 4400ms; margin-top: 1rem; font-weight: 700; }
+
+#treeReveal.visible .final-line-1,
+#treeReveal.visible .final-line-2,
+#treeReveal.visible .final-line-3,
+#treeReveal.visible .final-line-4,
+#treeReveal.visible .final-line-5 {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* ── STRESS STATES ────────────────────────────────── */
+.stress-1 #center { filter: contrast(1.08) saturate(1.1); }
+
+.stress-2 #center {
+    filter: contrast(1.25) brightness(1.15) saturate(1.2);
+    transform: scale(1.02);
+}
+
+.stress-2 #app { background: radial-gradient(circle at 50% 50%, rgba(255,0,0,0.05) 0%, #000 70%); }
+
+.stress-3 #center {
+    filter: contrast(1.5) brightness(1.35) saturate(1.5);
+    animation: stressShake 0.12s infinite;
+}
+
+.stress-3 #app { background: radial-gradient(circle at 50% 50%, rgba(255,0,0,0.12) 0%, #000 60%); }
+.stress-3 #staticOverlay { opacity: 0.15; }
+
+/* ── GLITCH / BREAKDOWN ───────────────────────────── */
+.glitching #gameLayer { animation: shake 100ms linear infinite; }
+
+.glitching #prompt {
+    animation: glitchText 80ms linear infinite;
+}
+
+.flashing::before {
+    content: "";
+    position: fixed; inset: 0; z-index: 200;
+    pointer-events: none;
+    animation: flash 400ms linear 5;
+    background: #fff;
+}
+
+.shatter #progress,
+.shatter #taskList,
+.shatter #center {
+    animation: shatter 800ms ease forwards;
+}
+
+.hidden-ui #progress,
+.hidden-ui #taskList,
+.hidden-ui #center {
+    opacity: 0; visibility: hidden; pointer-events: none;
+}
+
+/* ── KEYFRAMES ────────────────────────────────────── */
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+@keyframes taskPulse {
+    0%, 100% { opacity: 0.85; }
+    50% { opacity: 1; }
+}
+
+@keyframes warningPop {
+    0%   { opacity: 0; transform: translateY(6px) scale(0.95); }
+    15%  { opacity: 1; transform: translateY(0) scale(1); }
+    80%  { opacity: 1; }
+    100% { opacity: 0; transform: translateY(-10px) scale(0.97); }
+}
+
+@keyframes shake {
+    0%   { transform: translate(0,0); }
+    25%  { transform: translate(-2px, 2px); }
+    50%  { transform: translate(2px, -1px); }
+    75%  { transform: translate(-1px, -2px); }
+    100% { transform: translate(1px, 2px); }
+}
+
+@keyframes stressShake {
+    0%   { transform: translate(0,0) scale(1.02); }
+    25%  { transform: translate(-1px, 1px) scale(1.02); }
+    50%  { transform: translate(1px, -1px) scale(1.02); }
+    75%  { transform: translate(-1px, -1px) scale(1.02); }
+    100% { transform: translate(1px, 1px) scale(1.02); }
+}
+
+@keyframes flash {
+    0%, 100% { opacity: 0; }
+    40% { opacity: 0.7; }
+    50% { opacity: 1; }
+}
+
+@keyframes shatter {
+    0%   { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); filter: blur(0); }
+    40%  { opacity: 0.7; }
+    100% { opacity: 0; transform: translateY(180px) rotate(5deg) scale(0.82); filter: blur(5px); }
+}
+
+@keyframes glitchText {
+    0%   { clip-path: inset(0 0 95% 0); transform: translateX(-3px); }
+    25%  { clip-path: inset(30% 0 40% 0); transform: translateX(3px); }
+    50%  { clip-path: inset(60% 0 20% 0); transform: translateX(-2px); }
+    75%  { clip-path: inset(80% 0 5% 0); transform: translateX(4px); }
+    100% { clip-path: inset(0 0 95% 0); transform: translateX(0); }
+}
+
+/* ── RESPONSIVE ───────────────────────────────────── */
+@media (max-width: 800px) {
+    #taskList { top: 66px; right: 12px; width: min(240px, calc(100vw - 24px)); }
+    #progress { top: 12px; gap: 5px; }
+    .node { width: 10px; height: 10px; }
+}
