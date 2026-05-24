@@ -54,6 +54,72 @@ html, body {
     display: flex; align-items: center; justify-content: center;
 }
 
+#breakdownOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 95;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 240ms ease;
+    mix-blend-mode: screen;
+}
+
+.corner-words-on #breakdownOverlay {
+    opacity: 1;
+}
+
+#strainWords {
+    position: absolute;
+    inset: 0;
+}
+
+.scanline-layer,
+.noise-layer {
+    position: absolute;
+    inset: 0;
+}
+
+.scanline-layer {
+    background:
+        repeating-linear-gradient(
+            to bottom,
+            rgba(255,255,255,0.11) 0px,
+            rgba(255,255,255,0.11) 1px,
+            rgba(0,0,0,0.16) 1px,
+            rgba(0,0,0,0.16) 3px
+        );
+    opacity: 0.25;
+}
+
+.noise-layer {
+    background:
+        repeating-linear-gradient(
+            90deg,
+            rgba(255,255,255,0.12) 0px,
+            rgba(255,255,255,0.12) 2px,
+            rgba(0,0,0,0.18) 2px,
+            rgba(0,0,0,0.18) 4px
+        );
+    opacity: 0.12;
+}
+
+.strain-word {
+    position: absolute;
+    color: rgba(245, 245, 245, 0.92);
+    font-family: "Press Start 2P", monospace;
+    font-size: clamp(0.6rem, 2vw, 1.5rem);
+    letter-spacing: 1px;
+    line-height: 1.1;
+    text-transform: uppercase;
+    opacity: 0;
+    white-space: nowrap;
+    text-shadow:
+        0 0 8px rgba(255,255,255,0.5),
+        2px 0 rgba(0,0,0,0.6),
+        -2px 0 rgba(255,255,255,0.35);
+    animation: strainWordBurst 1.6s ease-out forwards;
+}
+
 #gameLayer {
     position: relative;
     width: 100%; height: 100%;
@@ -99,6 +165,13 @@ html, body {
     border: 1px solid var(--panel-border);
     border-left: 3px solid rgba(255,255,255,0.6);
     padding: 12px 12px 10px;
+}
+
+.tasklist-blocked {
+    border-color: rgba(255, 72, 72, 0.95) !important;
+    border-left-color: rgba(255, 40, 40, 1) !important;
+    box-shadow: 0 0 0 1px rgba(255, 40, 40, 0.65), 0 0 22px rgba(255, 20, 20, 0.55);
+    animation: taskListBlockPulse 700ms ease-out;
 }
 
 .task-header {
@@ -161,6 +234,46 @@ html, body {
     font-weight: 700;
     font-size: 0.95rem;
     color: #fff;
+}
+
+.task-reading-divider {
+    margin-top: 6px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.18);
+    font-family: "Press Start 2P", monospace;
+    font-size: 0.42rem;
+    letter-spacing: 1px;
+    color: rgba(170, 180, 255, 0.9);
+}
+
+.task-reading {
+    margin-top: 6px;
+    padding: 7px 8px;
+    border: 1px solid rgba(166, 181, 255, 0.35);
+    background: rgba(26, 34, 76, 0.38);
+}
+
+.task-reading-title {
+    margin: 0 0 6px;
+    font-family: "Press Start 2P", monospace;
+    font-size: 0.4rem;
+    line-height: 1.5;
+    color: rgba(214, 221, 255, 0.96);
+}
+
+.task-reading-quote {
+    margin: 0 0 5px;
+    font-size: 0.8rem;
+    line-height: 1.35;
+    color: rgba(255, 241, 241, 0.98);
+    text-shadow: 0 0 10px rgba(255, 88, 88, 0.3);
+}
+
+.task-reading-cite {
+    margin: 0;
+    font-size: 0.62rem;
+    line-height: 1.3;
+    color: rgba(180, 190, 255, 0.9);
 }
 
 /* ── CENTER STAGE ─────────────────────────────────── */
@@ -309,6 +422,95 @@ html, body {
     transition: opacity 200ms;
 }
 
+/* ── MENTAL STRAIN STATES ─────────────────────────── */
+.micro-glitch #center {
+    animation: pulseGlitch 220ms steps(2, end);
+}
+
+.strain-1 #center {
+    filter: contrast(1.12) saturate(1.08) hue-rotate(-4deg);
+}
+
+.strain-1 #prompt {
+    text-shadow: 1px 0 rgba(255, 0, 0, 0.35), -1px 0 rgba(0, 120, 255, 0.35);
+}
+
+.strain-1 #breakdownOverlay {
+    filter: grayscale(0.85) contrast(1.2);
+}
+
+.strain-1 .scanline-layer {
+    opacity: 0.35;
+    animation: scanDrift 420ms linear infinite;
+}
+
+.strain-1 .noise-layer {
+    opacity: 0.2;
+    animation: noiseFlicker 260ms steps(2, end) infinite;
+}
+
+.strain-2 #center {
+    filter: contrast(1.25) saturate(1.25) hue-rotate(-8deg);
+    animation: stressShake 0.18s infinite;
+}
+
+.strain-2 #prompt {
+    animation: glitchText 150ms linear infinite;
+}
+
+.strain-2 #app::after {
+    background: radial-gradient(ellipse at center, rgba(255, 0, 0, 0.07) 45%, rgba(0,0,0,0.85) 100%);
+}
+
+.strain-2 #breakdownOverlay {
+    filter: grayscale(1) contrast(1.45) brightness(1.15);
+}
+
+.strain-2 .scanline-layer {
+    opacity: 0.55;
+    animation: scanDrift 200ms linear infinite;
+}
+
+.strain-2 .noise-layer {
+    opacity: 0.35;
+    animation: noiseFlicker 120ms steps(2, end) infinite;
+}
+
+.strain-3 #center {
+    filter: contrast(1.45) brightness(1.2) saturate(1.45) hue-rotate(-12deg);
+    animation: stressShake 0.1s infinite;
+}
+
+.strain-3 #prompt {
+    animation: glitchText 90ms linear infinite;
+    border-color: rgba(255, 80, 80, 0.85);
+}
+
+.strain-3 #staticOverlay {
+    opacity: 0.22;
+}
+
+.strain-3 #app::after {
+    background:
+        radial-gradient(circle at 20% 20%, rgba(255, 0, 0, 0.1) 0, transparent 40%),
+        radial-gradient(circle at 80% 75%, rgba(0, 100, 255, 0.08) 0, transparent 35%),
+        radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.9) 100%);
+}
+
+.strain-3 #breakdownOverlay {
+    filter: grayscale(1) contrast(1.8) brightness(1.28);
+}
+
+.strain-3 .scanline-layer {
+    opacity: 0.8;
+    animation: scanDrift 85ms linear infinite;
+}
+
+.strain-3 .noise-layer {
+    opacity: 0.62;
+    animation: noiseFlicker 60ms steps(2, end) infinite;
+}
+
 /* ── MODAL ────────────────────────────────────────── */
 #taskModal {
     position: fixed; inset: 0; z-index: 80;
@@ -447,6 +649,31 @@ html, body {
     color: #1a6e2e;
     font-family: Arial, sans-serif;
     min-height: 1em;
+}
+
+.citation-quote {
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border-left: 3px solid #2233ff;
+    background: #eef2ff;
+    color: #0f1b3b;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    font-style: italic;
+}
+
+.citation-title {
+    margin: 0 0 8px;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: #1e2b45;
+}
+
+.citation-body {
+    margin: 0 0 8px;
+    font-size: 0.85rem;
+    line-height: 1.55;
+    color: #111;
 }
 
 /* Resume */
@@ -644,6 +871,14 @@ html, body {
     50% { opacity: 1; }
 }
 
+@keyframes taskListBlockPulse {
+    0% { transform: translateX(0); }
+    20% { transform: translateX(-3px); }
+    45% { transform: translateX(3px); }
+    70% { transform: translateX(-2px); }
+    100% { transform: translateX(0); }
+}
+
 @keyframes warningPop {
     0%   { opacity: 0; transform: translateY(6px) scale(0.95); }
     15%  { opacity: 1; transform: translateY(0) scale(1); }
@@ -685,6 +920,34 @@ html, body {
     50%  { clip-path: inset(60% 0 20% 0); transform: translateX(-2px); }
     75%  { clip-path: inset(80% 0 5% 0); transform: translateX(4px); }
     100% { clip-path: inset(0 0 95% 0); transform: translateX(0); }
+}
+
+@keyframes pulseGlitch {
+    0%   { transform: translate(0, 0); filter: contrast(1); }
+    25%  { transform: translate(-2px, 1px); filter: contrast(1.2) hue-rotate(-6deg); }
+    50%  { transform: translate(2px, -1px); filter: contrast(1.3) hue-rotate(6deg); }
+    75%  { transform: translate(-1px, -1px); filter: contrast(1.15); }
+    100% { transform: translate(0, 0); filter: contrast(1); }
+}
+
+@keyframes scanDrift {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(8px); }
+}
+
+@keyframes noiseFlicker {
+    0% { transform: translateX(0); opacity: 0.2; }
+    25% { transform: translateX(-3px); opacity: 0.48; }
+    50% { transform: translateX(2px); opacity: 0.25; }
+    75% { transform: translateX(-2px); opacity: 0.52; }
+    100% { transform: translateX(0); opacity: 0.18; }
+}
+
+@keyframes strainWordBurst {
+    0% { opacity: 0; filter: blur(1px); }
+    18% { opacity: 0.95; filter: blur(0px); }
+    78% { opacity: 0.62; filter: blur(0.2px); }
+    100% { opacity: 0; filter: blur(1.5px); }
 }
 
 /* ── RESPONSIVE ───────────────────────────────────── */

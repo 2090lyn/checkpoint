@@ -28,18 +28,18 @@
         [STAGES.high_school]: {
             progress: 1,
             label: "STAGE 1 — HIGH SCHOOL",
-            prompt: "You are 18. Everyone is asking the same question.\n\n\"What will your major be?\"\n\nYou don't know yet. But you have to pick something.",
+            prompt: "You are 17. Everyone is asking the same question.\n\n\"What will your major be?\"\n\nYou don't know yet. But you have to pick something.",
             subtext: "pick wisely. there are no second chances.",
             options: [
                 { label: "Computer Science",   type: "advance", next: STAGES.college },
                 { label: "Art",                type: "warn",    message: "That won't pay the bills." },
                 { label: "I don't know yet",   type: "warn",    message: "That's not an option." },
                 { label: "Philosophy",         type: "warn",    message: "What are you going to do with that?" },
+                { label: "Take a gap year",     type: "warn",    message: "That's a mistake, you won't go back." },
             ],
             tasks: [
-                { name: "Finish college applications",  seconds: 90 },
-                { name: "Study for the SATs",           seconds: 72 },
-                { name: "Pick a \"practical\" major",   seconds: 60 },
+                { name: "Apply to college",  seconds: 90 },
+                { name: "Resume",           seconds: 72 },
             ]
         },
 
@@ -54,8 +54,6 @@
             ],
             tasks: [
                 { name: "Apply to 40+ internships",     seconds: 99 },
-                { name: "Finish the capstone project",  seconds: 85 },
-                { name: "Network (pretend to be fine)",  seconds: 70 },
             ]
         },
 
@@ -69,9 +67,8 @@
                 { label: "Be grateful",     type: "loop" },
             ],
             tasks: [
-                { name: "Hit quarterly targets",        seconds: 45 },
+                { name: "Do your code work",            seconds: 45 },
                 { name: "Clear your inbox",             seconds: 38 },
-                { name: "Attend the mandatory fun",     seconds: 42 },
                 { name: "Complete performance review",  seconds: 35 },
             ]
         },
@@ -143,8 +140,38 @@
         revealShown:           false,
         lastPointer:           { x: window.innerWidth / 2, y: window.innerHeight / 2 },
         playerName:            "",
-        decisions:             []
+        decisions:             [],
+        seenReadings:          new Set(),
+        mentalStrain:          0,
+        strainDecayTimer:      null
     };
+
+    const readingAssignments = [
+        {
+            id: "hanson",
+            stage: STAGES.college,
+            title: "Reading Assignment 1: Temporal Replay",
+            quote: "\"Almost all games and the pleasures associated with their play are reliant on the mechanic of repetition and replay.\"",
+            cite: "Hanson, Matt. Game Time: Understanding Temporality in Video Games. Routledge, 2018.",
+            tieIn: "If replay is central to play, then one timeline is a myth. Every loop in this game is proof that another life was always possible."
+        },
+        {
+            id: "zagal_mateas",
+            stage: STAGES.career,
+            title: "Reading Assignment 2: Temporal Frames",
+            quote: "\"A temporal frame is a set of events, along with the temporality induced by the relationships between those events.\"",
+            cite: "Zagal, Jose P., and Michael Mateas. \"Time in Video Games: A Survey and Analysis.\" Simulation & Gaming 41.6 (2010): 844-868.",
+            tieIn: "Pressure is engineered. Deadlines, checklists, and pace are not neutral clocks; they are systems that teach you to fear being behind."
+        },
+        {
+            id: "pelletier",
+            stage: STAGES.retirement,
+            title: "Reading Assignment 3: Productivity Time",
+            quote: "\"Much attention has been given, justifiably, to 'crunch'.\"",
+            cite: "Pelletier, Caroline. \"How Time Flows Making Games.\" European Journal of Cultural Studies 27.2 (2024): 233-248.",
+            tieIn: "When output becomes identity, exhaustion feels like failure. This game mirrors that logic so the player can feel how violent it is."
+        }
+    ];
 
     // ─────────────────────────────────────────────────────────────────────────
     // DOM REFS
@@ -157,11 +184,13 @@
     const subtextEl     = document.getElementById("subtext");
     const optionsEl     = document.getElementById("options");
     const tasksEl       = document.getElementById("tasks");
+    const taskListEl    = document.getElementById("taskList");
     const warningLayer  = document.getElementById("warningLayer");
     const taskModal     = document.getElementById("taskModal");
     const modalTitle    = document.getElementById("modalTitle");
     const modalBody     = document.getElementById("modalBody");
     const closeModalBtn = document.getElementById("closeModal");
+    const strainWordsEl = document.getElementById("strainWords");
     const treeReveal    = document.getElementById("treeReveal");
     const treeCanvas    = document.getElementById("treeCanvas");
     const staticOverlay = document.getElementById("staticOverlay");
@@ -171,6 +200,10 @@
     // ─────────────────────────────────────────────────────────────────────────
 
     const TOTAL_STEPS = 6;
+    const TASK_MODAL_AUTOCLOSE_MS = 1800;
+    // Testing toggle:
+    // Set to true to require all objectives (including reading) before moving on.
+    const REQUIRE_TASKS_TO_ADVANCE = false;
 
     function createProgressBar(step) {
         progressEl.innerHTML = "";
@@ -196,13 +229,22 @@
     // ─────────────────────────────────────────────────────────────────────────
 
     function cloneTasks(stageTasks) {
-        return (stageTasks || []).map(t => ({ name: t.name, remaining: t.seconds, completed: false }));
+        return (stageTasks || []).map(t => ({
+            name: t.name,
+            remaining: t.seconds,
+            completed: false,
+            noTimer: !!t.noTimer
+        }));
     }
 
     function formatSeconds(total) {
         const s = Math.max(0, Math.floor(total));
         const m = Math.floor(s / 60);
         return `${String(m).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`;
+    }
+
+    function getReadingByStage(stage) {
+        return readingAssignments.find(item => item.stage === stage) || null;
     }
 
     function renderTasks() {
@@ -228,7 +270,7 @@
             row.appendChild(check);
             row.appendChild(name);
 
-            if (!task.completed) {
+            if (!task.completed && !task.noTimer) {
                 const timer = document.createElement("span");
                 timer.className = "task-time";
                 timer.textContent = formatSeconds(task.remaining);
@@ -242,6 +284,20 @@
         state.tasks = state.tasks.map(t => t.name === taskName ? { ...t, completed: true } : t);
         state.completedTasks.add(taskName);
         renderTasks();
+    }
+
+    function allStageTasksCompleted() {
+        if (!state.tasks.length) return true;
+        return state.tasks.every(task => task.completed);
+    }
+
+    function pulseTaskListBlocked() {
+        if (!taskListEl) return;
+        taskListEl.classList.remove("tasklist-blocked");
+        // Restart animation cleanly on repeated failed attempts.
+        void taskListEl.offsetWidth;
+        taskListEl.classList.add("tasklist-blocked");
+        setTimeout(() => taskListEl.classList.remove("tasklist-blocked"), 700);
     }
 
     function tickTasks() {
@@ -261,11 +317,55 @@
     // ─────────────────────────────────────────────────────────────────────────
 
     function setStressClass() {
-        app.classList.remove("stress-1", "stress-2", "stress-3");
+        app.classList.remove("stress-1", "stress-2", "stress-3", "strain-1", "strain-2", "strain-3", "corner-words-on");
         const loopStages = [STAGES.career, STAGES.family, STAGES.retirement];
-        if (!loopStages.includes(state.currentStage)) return;
-        const level = Math.min(3, state.loopClicks);
-        if (level > 0) app.classList.add(`stress-${level}`);
+        if (loopStages.includes(state.currentStage)) {
+            const level = Math.min(3, state.loopClicks);
+            if (level > 0) app.classList.add(`stress-${level}`);
+        }
+
+        const strainLevel = Math.min(3, Math.floor(state.mentalStrain / 3));
+        if (strainLevel > 0) {
+            app.classList.add(`strain-${strainLevel}`);
+            app.classList.add("corner-words-on");
+        }
+    }
+
+    function scheduleStrainDecay() {
+        if (state.strainDecayTimer) clearTimeout(state.strainDecayTimer);
+        state.strainDecayTimer = setTimeout(() => {
+            state.mentalStrain = Math.max(0, state.mentalStrain - 1);
+            setStressClass();
+            if (state.mentalStrain > 0) scheduleStrainDecay();
+        }, 1800);
+    }
+
+    function spawnStrainWord(text) {
+        if (!strainWordsEl || !text) return;
+        const word = document.createElement("div");
+        word.className = "strain-word";
+        word.textContent = text;
+
+        const x = Math.floor(8 + Math.random() * 78);
+        const y = Math.floor(8 + Math.random() * 78);
+        const rotation = Math.floor(-42 + Math.random() * 84);
+        const scale = (0.8 + Math.random() * 1.9).toFixed(2);
+
+        word.style.left = `${x}%`;
+        word.style.top = `${y}%`;
+        word.style.transform = `translate(-50%, -50%) rotate(${rotation}deg) scale(${scale})`;
+        strainWordsEl.appendChild(word);
+        setTimeout(() => word.remove(), 1600);
+    }
+
+    function addMentalStrain(x, y, phrase) {
+        state.mentalStrain = Math.min(12, state.mentalStrain + 1);
+        setStressClass();
+        scheduleStrainDecay();
+
+        app.classList.add("micro-glitch");
+        setTimeout(() => app.classList.remove("micro-glitch"), 220);
+        spawnStrainWord(phrase);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -334,6 +434,15 @@
 
         state.tasks         = cloneTasks(cfg.tasks);
         state.completedTasks = new Set();
+        const unlockedReading = getReadingByStage(state.currentStage);
+        if (unlockedReading) {
+            state.tasks.push({
+                name: "Read assigned reading",
+                remaining: 0,
+                completed: false,
+                noTimer: true
+            });
+        }
         renderTasks();
         tickTasks();
         setStressClass();
@@ -357,7 +466,13 @@
             state.lastPointer = { x, y };
 
             if (option.type === "warn") {
+                addMentalStrain(x, y, option.message || option.label);
                 showWarning(option.message, x, y);
+                return;
+            }
+
+            if (REQUIRE_TASKS_TO_ADVANCE && !allStageTasksCompleted()) {
+                pulseTaskListBlocked();
                 return;
             }
 
@@ -462,6 +577,7 @@
             state.playerName   = name;
             state.currentStage = STAGES.high_school;
             state.progressStep = stageConfig[STAGES.high_school].progress;
+            state.mentalStrain = 0;
             renderStage();
         });
     }
@@ -524,6 +640,7 @@
         submit.addEventListener("click", () => {
             note.textContent = successText;
             if (typeof onSubmit === "function") onSubmit();
+            setTimeout(() => closeTaskModal(), TASK_MODAL_AUTOCLOSE_MS);
         });
 
         return card;
@@ -537,20 +654,109 @@
 
         const displayName = state.playerName || "You";
 
-        if (taskName === "Finish college applications") {
-            modalBody.appendChild(createSimulationCard(
-                "College Application Portal",
-                [
-                    { label: "Applicant Name", value: displayName, full: true },
-                    { label: "Intended Major", value: "Computer Science (because it's practical)" },
-                    { label: "Essay Prompt",   value: "Describe a challenge you overcame." },
-                    { label: "Word Count",     value: "650 / 650", full: true },
-                ],
-                "Submit Application",
-                "Application submitted. Status: Pending. You will hear back in 4–6 weeks.",
-                "Common App Portal",
-                () => completeTask(taskName)
-            ));
+        if (taskName === "Read assigned reading") {
+            const entry = getReadingByStage(state.currentStage);
+            if (!entry) {
+                modalBody.appendChild(createSimulationCard(
+                    "Reading Assignment",
+                    [{ label: "Status", value: "No reading assigned", full: true }],
+                    "Close",
+                    "No action required.",
+                    "Course Reader",
+                    () => completeTask(taskName)
+                ));
+            } else {
+                const readingCard = document.createElement("section");
+                readingCard.className = "sim-box paper";
+                readingCard.innerHTML = `
+                    <div class="doc-header"><strong>${entry.title}</strong><span class="doc-subtle">Required</span></div>
+                    <p class="citation-quote">${entry.quote}</p>
+                    <p class="citation-title">${entry.cite}</p>
+                    <p class="citation-body"><strong>Why this matters in this game:</strong> ${entry.tieIn}</p>
+                    <div class="sim-actions">
+                        <button id="completeReadingBtn" type="button" class="sim-btn">Mark As Read</button>
+                    </div>
+                    <p id="readingNote" class="sim-note"></p>
+                `;
+                modalBody.appendChild(readingCard);
+                const completeBtn = document.getElementById("completeReadingBtn");
+                const note = document.getElementById("readingNote");
+                if (completeBtn) {
+                    completeBtn.addEventListener("click", () => {
+                        if (note) note.textContent = "Reading completed.";
+                        completeTask(taskName);
+                        setTimeout(() => closeTaskModal(), TASK_MODAL_AUTOCLOSE_MS);
+                    });
+                }
+            }
+        } else if (taskName === "Finish college applications" || taskName === "Apply to college") {
+            const card = document.createElement("section");
+            card.className = "sim-box paper";
+            card.innerHTML = `
+                <div style="font-family:Arial,sans-serif; color:#111;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #ddd; padding-bottom:8px; margin-bottom:12px;">
+                        <strong style="font-size:0.84rem;">Common Application - School List</strong>
+                        <span style="font-size:0.75rem; color:#666;">Applicant: ${displayName}</span>
+                    </div>
+
+                    <p style="margin:0 0 10px; font-size:0.82rem;">List 3 colleges and star the one you committed to:</p>
+
+                    <div style="display:grid; gap:8px; margin-bottom:10px;">
+                        <div style="display:grid; grid-template-columns:28px 1fr; gap:8px; align-items:center;">
+                            <label style="font-size:1rem;">
+                                <input type="radio" name="commitSchool" value="1" />
+                            </label>
+                            <input id="collegeInput1" type="text" placeholder="College #1" style="width:100%; padding:7px 8px; border:1px solid #aaa; font-size:0.84rem;">
+                        </div>
+                        <div style="display:grid; grid-template-columns:28px 1fr; gap:8px; align-items:center;">
+                            <label style="font-size:1rem;">
+                                <input type="radio" name="commitSchool" value="2" />
+                            </label>
+                            <input id="collegeInput2" type="text" placeholder="College #2" style="width:100%; padding:7px 8px; border:1px solid #aaa; font-size:0.84rem;">
+                        </div>
+                        <div style="display:grid; grid-template-columns:28px 1fr; gap:8px; align-items:center;">
+                            <label style="font-size:1rem;">
+                                <input type="radio" name="commitSchool" value="3" />
+                            </label>
+                            <input id="collegeInput3" type="text" placeholder="College #3" style="width:100%; padding:7px 8px; border:1px solid #aaa; font-size:0.84rem;">
+                        </div>
+                    </div>
+                    <p style="margin:0; font-size:0.78rem; color:#555;">Select one radio button to mark your committed school.</p>
+                </div>
+            `;
+            modalBody.appendChild(card);
+
+            const submitCard = document.createElement("section");
+            submitCard.className = "sim-box paper";
+            submitCard.innerHTML = `
+                <div class="doc-header"><strong>Application Submission</strong><span class="doc-subtle">Common App Portal</span></div>
+                <div class="sim-actions">
+                    <button id="submitCollegeAppBtn" type="button" class="sim-btn">Submit Application</button>
+                </div>
+                <p id="collegeSubmitNote" class="sim-note"></p>
+            `;
+            modalBody.appendChild(submitCard);
+
+            const submitBtn = document.getElementById("submitCollegeAppBtn");
+            const note = document.getElementById("collegeSubmitNote");
+            if (submitBtn) {
+                submitBtn.addEventListener("click", () => {
+                    const school1 = (document.getElementById("collegeInput1")?.value || "").trim();
+                    const school2 = (document.getElementById("collegeInput2")?.value || "").trim();
+                    const school3 = (document.getElementById("collegeInput3")?.value || "").trim();
+                    const committed = modalBody.querySelector('input[name="commitSchool"]:checked');
+
+                    if (!school1 || !school2 || !school3 || !committed) {
+                        showWarning("Required: list 3 colleges and mark one committed school.", window.innerWidth / 2, window.innerHeight / 2);
+                        if (note) note.textContent = "Required fields missing.";
+                        return;
+                    }
+
+                    if (note) note.textContent = "Application submitted. Status: Pending. You will hear back in 4-6 weeks.";
+                    completeTask(taskName);
+                    setTimeout(() => closeTaskModal(), TASK_MODAL_AUTOCLOSE_MS);
+                });
+            }
         } else if (taskName === "Study for the SATs") {
             modalBody.appendChild(createSimulationCard(
                 "SAT Prep Dashboard",
@@ -563,6 +769,48 @@
                 "Complete Practice Test",
                 "Test completed. Score logged. Try again tomorrow.",
                 "College Board Prep",
+                () => completeTask(taskName)
+            ));
+        } else if (taskName === "Resume") {
+            const resume = document.createElement("section");
+            resume.className = "sim-box paper";
+            resume.innerHTML = `
+                <div style="font-family:Arial,sans-serif; color:#111;">
+                    <div style="background:#f3f3f3; border:1px solid #cfcfcf; padding:12px;">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+                            <h2 style="margin:0; font-size:1.5rem; letter-spacing:0.2px;">${displayName}</h2>
+                            <div style="font-size:0.72rem; color:#1453b6; line-height:1.5; text-align:right;">
+                                <div style="filter:blur(1px);">(###) ###-####</div>
+                                <div style="text-decoration:underline;">██████@████.edu</div>
+                                <div style="text-decoration:underline;">linkedin.com/in/██████</div>
+                                <div style="text-decoration:underline;">github.com/██████</div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top:6px; border-top:2px solid #888; padding-top:6px;">
+                            <div style="color:#1f66b4; font-size:0.9rem; font-weight:800; letter-spacing:0.6px;">EDUCATION</div>
+                            <p style="margin:4px 0; font-size:0.8rem;"><strong>University of California: San Diego</strong> - B.S. in Computer Science</p>
+                            <p style="margin:2px 0; font-size:0.78rem; color:#444;">• GPA: 3.48 | Relevant Coursework: Data Structures, Systems, OOP</p>
+                        </div>
+
+                        <div style="margin-top:8px; border-top:2px solid #888; padding-top:6px;">
+                            <div style="color:#1f66b4; font-size:0.9rem; font-weight:800; letter-spacing:0.6px;">EXPERIENCE</div>
+                            <p style="margin:4px 0; font-size:0.8rem;"><strong>Software Engineering Intern</strong> - Remote</p>
+                            <p style="margin:2px 0; font-size:0.78rem; color:#444;">• Built production-facing features for location-based web app</p>
+                            <p style="margin:2px 0; font-size:0.78rem; color:#444;">• Integrated external APIs and improved search discoverability</p>
+                            <p style="margin:2px 0; font-size:0.78rem; color:#444;">• Collaborated in Agile team to deliver user-facing improvements</p>
+                        </div>
+                    </div>
+                    <p style="margin:8px 0 0; font-size:0.74rem; color:#666;">Personal identifiers intentionally redacted/blurred.</p>
+                </div>
+            `;
+            modalBody.appendChild(resume);
+            modalBody.appendChild(createSimulationCard(
+                "Resume Upload",
+                [{ label: "File", value: "resume.pdf", full: true }],
+                "Upload Resume",
+                "Resume uploaded successfully.",
+                "Applicant Profile",
                 () => completeTask(taskName)
             ));
         } else if (taskName === "Pick a \"practical\" major") {
@@ -598,6 +846,54 @@
                 </div>
             `;
             modalBody.appendChild(form);
+
+            const resume = document.createElement("section");
+            resume.className = "sim-box paper";
+            resume.innerHTML = `
+                <div style="font-family:Arial,sans-serif; color:#111;">
+                    <div style="background:#f3f3f3; border:1px solid #cfcfcf; padding:12px;">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+                            <h2 style="margin:0; font-size:1.5rem; letter-spacing:0.2px;">${displayName}</h2>
+                            <div style="font-size:0.72rem; color:#1453b6; line-height:1.5; text-align:right;">
+                                <div style="filter:blur(1px);">(###) ###-####</div>
+                                <div style="text-decoration:underline;">██████@████.edu</div>
+                                <div style="text-decoration:underline;">linkedin.com/in/██████</div>
+                                <div style="text-decoration:underline;">github.com/██████</div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top:6px; border-top:2px solid #888; padding-top:6px;">
+                            <div style="color:#1f66b4; font-size:0.9rem; font-weight:800; letter-spacing:0.6px;">EDUCATION</div>
+                            <p style="margin:4px 0; font-size:0.8rem;"><strong>University of California: San Diego</strong> - B.S. in Computer Science</p>
+                            <p style="margin:2px 0; font-size:0.78rem; color:#444;">• GPA: 3.48 | Relevant Coursework: Data Structures, Systems, OOP</p>
+                        </div>
+
+                        <div style="margin-top:8px; border-top:2px solid #888; padding-top:6px;">
+                            <div style="color:#1f66b4; font-size:0.9rem; font-weight:800; letter-spacing:0.6px;">EXPERIENCE</div>
+                            <p style="margin:4px 0; font-size:0.8rem;"><strong>Software Engineering Intern</strong> - Remote</p>
+                            <p style="margin:2px 0; font-size:0.78rem; color:#444;">• Built production-facing features for location-based web app</p>
+                            <p style="margin:2px 0; font-size:0.78rem; color:#444;">• Integrated external APIs and improved search discoverability</p>
+                            <p style="margin:2px 0; font-size:0.78rem; color:#444;">• Collaborated in Agile team to deliver user-facing improvements</p>
+                        </div>
+                    </div>
+                    <p style="margin:8px 0 0; font-size:0.74rem; color:#666;">Personal identifiers intentionally redacted/blurred.</p>
+                </div>
+            `;
+            modalBody.appendChild(resume);
+
+            const terminal = document.createElement("section");
+            terminal.className = "sim-box paper";
+            terminal.innerHTML = `
+                <div style="background:#0b0b0b; color:#d8f9d8; border:1px solid #2d2d2d; padding:10px; font-family:Menlo,Consolas,monospace;">
+                    <div style="font-size:0.74rem; color:#86ff86; margin-bottom:7px;">Online Assessment Terminal</div>
+                    <div style="font-size:0.82rem; margin-bottom:6px;">$ python3</div>
+                    <div style="font-size:0.82rem; margin-bottom:6px;">>>> print("Hello World")</div>
+                    <div style="font-size:0.82rem; color:#ffffff; margin-bottom:4px;">Hello World</div>
+                    <div style="font-size:0.74rem; color:#a7a7a7;">Result: Test case 1/1 passed.</div>
+                </div>
+            `;
+            modalBody.appendChild(terminal);
+
             modalBody.appendChild(createSimulationCard(
                 "Submission Confirmation",
                 [{ label: "Application ID", value: "INT-2024-0027", full: true }],
@@ -606,6 +902,82 @@
                 "Hiring Portal",
                 () => completeTask(taskName)
             ));
+        } else if (taskName === "Do your code work") {
+            const codeDays = [
+                {
+                    label: "Day 1",
+                    expected: 'print("Hello World!")',
+                    output: "Hello World!"
+                },
+                {
+                    label: "Day 2",
+                    expected: `print("Hello ${displayName}")`,
+                    output: `Hello ${displayName}`
+                },
+                {
+                    label: "Day 3",
+                    expected: `print("Goodbye ${displayName}")`,
+                    output: `Goodbye ${displayName}`
+                }
+            ];
+            let dayIndex = 0;
+
+            const terminal = document.createElement("section");
+            terminal.className = "sim-box paper";
+            terminal.innerHTML = `
+                <div style="background:#0b0b0b; color:#d8f9d8; border:1px solid #2d2d2d; padding:10px; font-family:Menlo,Consolas,monospace;">
+                    <div style="font-size:0.74rem; color:#86ff86; margin-bottom:7px;">Engineering Terminal - Daily Deliverable</div>
+                    <div style="font-size:0.82rem; color:#bdbdbd; margin-bottom:6px;" id="codeDayLabel">${codeDays[0].label} task: type exactly <code style="color:#fff;">${codeDays[0].expected}</code></div>
+                    <div style="font-size:0.82rem; margin-bottom:6px;">$ python3</div>
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                        <span style="font-size:0.82rem;">>>></span>
+                        <input id="codeInputLine" type="text" placeholder='print("Hello World!")' style="flex:1; background:#111; color:#fff; border:1px solid #444; padding:6px 8px; font-family:Menlo,Consolas,monospace; font-size:0.82rem;">
+                    </div>
+                    <button id="runCodeBtn" type="button" class="sim-btn">Run</button>
+                    <p id="codeResultNote" style="margin:8px 0 0; font-size:0.8rem; color:#d8f9d8; min-height:1.2em;"></p>
+                </div>
+            `;
+            modalBody.appendChild(terminal);
+
+            const input = document.getElementById("codeInputLine");
+            const runBtn = document.getElementById("runCodeBtn");
+            const note = document.getElementById("codeResultNote");
+            const dayLabel = document.getElementById("codeDayLabel");
+
+            function runCheck() {
+                const typed = (input?.value || "").trim();
+                const currentDay = codeDays[dayIndex];
+                if (typed !== currentDay.expected) {
+                    if (note) note.textContent = `Syntax check failed. Expected: ${currentDay.expected}`;
+                    return;
+                }
+
+                if (note) note.textContent = `${currentDay.output}  [pass]`;
+
+                dayIndex++;
+                if (dayIndex < codeDays.length) {
+                    const nextDay = codeDays[dayIndex];
+                    if (dayLabel) {
+                        dayLabel.innerHTML = `${nextDay.label} task: type exactly <code style="color:#fff;">${nextDay.expected}</code>`;
+                    }
+                    if (input) {
+                        input.value = "";
+                        input.placeholder = nextDay.expected;
+                        input.focus();
+                    }
+                    return;
+                }
+
+                completeTask(taskName);
+                setTimeout(() => closeTaskModal(), TASK_MODAL_AUTOCLOSE_MS);
+            }
+
+            if (runBtn) runBtn.addEventListener("click", runCheck);
+            if (input) {
+                input.addEventListener("keydown", e => {
+                    if (e.key === "Enter") runCheck();
+                });
+            }
         } else if (taskName === "Build resume" || taskName === "Finish the capstone project") {
             modalBody.appendChild(createSimulationCard(
                 "Capstone Project Submission",
@@ -618,6 +990,31 @@
                 "Submit Project",
                 "Submitted. You passed. You feel nothing.",
                 "Academic Portal",
+                () => completeTask(taskName)
+            ));
+        } else if (taskName === "Network (pretend to be fine)") {
+            const card = document.createElement("section");
+            card.className = "sim-box paper";
+            card.innerHTML = `
+                <div style="font-family:Arial,sans-serif; color:#111;">
+                    <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; color:#666; margin-bottom:10px;">Career Networking Event</div>
+                    <label style="display:block; font-size:0.75rem; font-weight:bold; margin-bottom:4px;">Elevator pitch</label>
+                    <textarea style="width:100%; height:60px; border:1px solid #aaa; padding:6px 8px; margin-bottom:8px; font-size:0.82rem;">Hi, I'm ${displayName}. I'm passionate about solving meaningful problems with technology...</textarea>
+                    <label style="display:block; font-size:0.75rem; font-weight:bold; margin-bottom:4px;">People to follow up with</label>
+                    <div style="border:1px solid #ddd; background:#fff; padding:8px; font-size:0.82rem;">
+                        <p style="margin:0 0 4px;">- Senior Engineer, Product Team</p>
+                        <p style="margin:0 0 4px;">- Recruiter, Summer Program</p>
+                        <p style="margin:0;">- Alumni Mentor, Startup Founder</p>
+                    </div>
+                </div>
+            `;
+            modalBody.appendChild(card);
+            modalBody.appendChild(createSimulationCard(
+                "Follow-Up Tracker",
+                [{ label: "LinkedIn Requests Sent", value: "3", full: true }],
+                "Log Contacts",
+                "Connections saved. Keep the momentum going.",
+                "Career Services Portal",
                 () => completeTask(taskName)
             ));
         } else if (taskName === "Hit quarterly targets") {
@@ -634,6 +1031,62 @@
                 "Performance Management System",
                 () => completeTask(taskName)
             ));
+        } else if (taskName === "Clear your inbox") {
+            const card = document.createElement("section");
+            card.className = "sim-box paper";
+            card.innerHTML = `
+                <div style="font-family:Arial,sans-serif; color:#111;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #ddd; padding-bottom:8px; margin-bottom:10px;">
+                        <strong style="font-size:0.85rem;">Inbox</strong>
+                        <span style="font-size:0.75rem; color:#666;">43 unread</span>
+                    </div>
+                    <div style="font-size:0.8rem; border:1px solid #ddd; background:#fff;">
+                        <div style="display:grid; grid-template-columns:150px 1fr 90px; padding:7px 8px; border-bottom:1px solid #eee;">
+                            <strong>From</strong><strong>Subject</strong><strong>Time</strong>
+                        </div>
+                        <div style="display:grid; grid-template-columns:150px 1fr 90px; padding:7px 8px; border-bottom:1px solid #f1f1f1;"><span>Manager</span><span>Quick update before EOD</span><span>9:07 AM</span></div>
+                        <div style="display:grid; grid-template-columns:150px 1fr 90px; padding:7px 8px; border-bottom:1px solid #f1f1f1;"><span>HR</span><span>Mandatory compliance reminder</span><span>8:41 AM</span></div>
+                        <div style="display:grid; grid-template-columns:150px 1fr 90px; padding:7px 8px; border-bottom:1px solid #f1f1f1;"><span>Recruiter</span><span>Catching up</span><span>Yesterday</span></div>
+                        <div style="display:grid; grid-template-columns:150px 1fr 90px; padding:7px 8px;"><span>Calendar Bot</span><span>Updated meeting location</span><span>Yesterday</span></div>
+                    </div>
+                </div>
+            `;
+            modalBody.appendChild(card);
+            modalBody.appendChild(createSimulationCard(
+                "Mailbox Actions",
+                [{ label: "Bulk Action", value: "Archive all unread", full: true }],
+                "Mark All As Read",
+                "Inbox zero achieved. New messages arriving...",
+                "Mail Client",
+                () => completeTask(taskName)
+            ));
+        } else if (taskName === "Complete performance review") {
+            const card = document.createElement("section");
+            card.className = "sim-box paper";
+            card.innerHTML = `
+                <div style="font-family:Arial,sans-serif; color:#111;">
+                    <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; color:#666; margin-bottom:10px;">Annual Self-Assessment</div>
+                    <label style="display:block; font-size:0.75rem; font-weight:bold; margin-bottom:4px;">What were your biggest accomplishments?</label>
+                    <textarea style="width:100%; height:62px; border:1px solid #aaa; padding:6px 8px; margin-bottom:8px; font-size:0.82rem;">Exceeded sprint velocity goals and supported cross-team launches.</textarea>
+                    <label style="display:block; font-size:0.75rem; font-weight:bold; margin-bottom:4px;">Areas for growth</label>
+                    <textarea style="width:100%; height:52px; border:1px solid #aaa; padding:6px 8px; margin-bottom:8px; font-size:0.82rem;">Improve stakeholder communication and strategic ownership.</textarea>
+                    <label style="display:block; font-size:0.75rem; font-weight:bold; margin-bottom:4px;">Rate your overall performance</label>
+                    <select style="width:100%; border:1px solid #aaa; padding:6px 8px; font-size:0.82rem;">
+                        <option>Exceeds Expectations</option>
+                        <option selected>Meets Expectations</option>
+                        <option>Needs Improvement</option>
+                    </select>
+                </div>
+            `;
+            modalBody.appendChild(card);
+            modalBody.appendChild(createSimulationCard(
+                "Submission",
+                [{ label: "Status", value: "Pending manager calibration", full: true }],
+                "Submit Review",
+                "Review submitted. Awaiting ranking cycle.",
+                "People Ops System",
+                () => completeTask(taskName)
+            ));
         } else if (taskName === "Book the venue (non-refundable)") {
             modalBody.appendChild(createSimulationCard(
                 "Venue Reservation",
@@ -646,6 +1099,146 @@
                 "Confirm Booking",
                 "Booking confirmed. There is no going back.",
                 "Events Booking System",
+                () => completeTask(taskName)
+            ));
+        } else if (taskName === "Invite 200 people you barely know") {
+            const card = document.createElement("section");
+            card.className = "sim-box paper";
+            card.innerHTML = `
+                <div style="font-family:Arial,sans-serif; color:#111;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #ddd; padding-bottom:8px; margin-bottom:10px;">
+                        <strong style="font-size:0.85rem;">Guest List Manager</strong>
+                        <span style="font-size:0.75rem; color:#666;">198 / 200 invited</span>
+                    </div>
+                    <div style="font-size:0.8rem; border:1px solid #ddd; background:#fff; padding:8px;">
+                        <p style="margin:0 0 6px;">Family Friends (52)</p>
+                        <p style="margin:0 0 6px;">Coworkers (38)</p>
+                        <p style="margin:0 0 6px;">Parents' Colleagues (44)</p>
+                        <p style="margin:0 0 6px;">People You Met Once (64)</p>
+                        <p style="margin:8px 0 0; color:#555;">Auto-suggestion: Add 2 more to avoid seating gaps.</p>
+                    </div>
+                </div>
+            `;
+            modalBody.appendChild(card);
+            modalBody.appendChild(createSimulationCard(
+                "Invitation Batch",
+                [{ label: "Delivery Method", value: "Email + Printed Cards", full: true }],
+                "Send Invitations",
+                "Invitations sent. RSVP tracking enabled.",
+                "Wedding Planner Suite",
+                () => completeTask(taskName)
+            ));
+        } else if (taskName === "Smile for the photos") {
+            const card = document.createElement("section");
+            card.className = "sim-box paper";
+            card.innerHTML = `
+                <div style="font-family:Arial,sans-serif; color:#111;">
+                    <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; color:#666; margin-bottom:10px;">Photography Session Checklist</div>
+                    <div style="display:grid; gap:6px; font-size:0.82rem;">
+                        <label><input type="checkbox" checked> Couple portraits complete</label>
+                        <label><input type="checkbox" checked> Family portraits complete</label>
+                        <label><input type="checkbox"> Candid laughter shots</label>
+                        <label><input type="checkbox"> First dance close-up</label>
+                    </div>
+                    <p style="margin-top:10px; font-size:0.8rem; color:#444;">Photographer note: \"Relax your jaw and keep smiling naturally.\"</p>
+                </div>
+            `;
+            modalBody.appendChild(card);
+            modalBody.appendChild(createSimulationCard(
+                "Session Wrap",
+                [{ label: "Album Package", value: "Premium (450 edited photos)", full: true }],
+                "Finish Session",
+                "Session complete. Preview gallery in 4-6 weeks.",
+                "Studio Portal",
+                () => completeTask(taskName)
+            ));
+        } else if (taskName === "Pay the mortgage") {
+            const card = document.createElement("section");
+            card.className = "sim-box paper";
+            card.innerHTML = `
+                <div style="font-family:Arial,sans-serif; color:#111;">
+                    <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; color:#666; margin-bottom:10px;">Online Banking</div>
+                    <div style="border:1px solid #ddd; background:#fff; padding:10px; font-size:0.82rem;">
+                        <p style="margin:0 0 6px;"><strong>Current Balance:</strong> $3,842.17</p>
+                        <p style="margin:0 0 6px;"><strong>Mortgage Due:</strong> $2,416.00</p>
+                        <p style="margin:0 0 6px;"><strong>Due Date:</strong> Today</p>
+                        <p style="margin:0;"><strong>Remaining After Payment:</strong> $1,426.17</p>
+                    </div>
+                </div>
+            `;
+            modalBody.appendChild(card);
+            modalBody.appendChild(createSimulationCard(
+                "Payment Authorization",
+                [{ label: "Transfer", value: "Checking -> Home Loan", full: true }],
+                "Pay Now",
+                "Payment submitted. Confirmation #: MTG-94031.",
+                "Bank Secure Portal",
+                () => completeTask(taskName)
+            ));
+        } else if (taskName === "Make it to the recital") {
+            const card = document.createElement("section");
+            card.className = "sim-box paper";
+            card.innerHTML = `
+                <div style="font-family:Arial,sans-serif; color:#111;">
+                    <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; color:#666; margin-bottom:10px;">Calendar Coordination</div>
+                    <div style="border:1px solid #ddd; background:#fff; padding:10px; font-size:0.82rem;">
+                        <p style="margin:0 0 6px;"><strong>3:30 PM</strong> Sprint demo (work)</p>
+                        <p style="margin:0 0 6px;"><strong>5:00 PM</strong> Commute across town</p>
+                        <p style="margin:0 0 6px;"><strong>6:00 PM</strong> Piano recital</p>
+                        <p style="margin:0;"><strong>Conflict:</strong> Traffic delay warning (+22 min)</p>
+                    </div>
+                </div>
+            `;
+            modalBody.appendChild(card);
+            modalBody.appendChild(createSimulationCard(
+                "Decision",
+                [{ label: "Action", value: "Leave meeting early", full: true }],
+                "Commit",
+                "Calendar updated. You might make it on time.",
+                "Family Calendar App",
+                () => completeTask(taskName)
+            ));
+        } else if (taskName === "Call your parents back") {
+            const card = document.createElement("section");
+            card.className = "sim-box paper";
+            card.innerHTML = `
+                <div style="font-family:Arial,sans-serif; color:#111;">
+                    <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; color:#666; margin-bottom:10px;">Phone</div>
+                    <div style="border:1px solid #ddd; background:#fff; padding:10px; font-size:0.82rem;">
+                        <p style="margin:0 0 6px;"><strong>Missed Calls:</strong> Mom (2), Dad (1)</p>
+                        <p style="margin:0 0 6px;"><strong>Last voicemail:</strong> \"No rush, just wanted to hear your voice.\"</p>
+                        <p style="margin:0;"><strong>Unread texts:</strong> 4</p>
+                    </div>
+                </div>
+            `;
+            modalBody.appendChild(card);
+            modalBody.appendChild(createSimulationCard(
+                "Call Back",
+                [{ label: "Contact", value: "Family", full: true }],
+                "Dial",
+                "Connected. They ask if you're eating enough.",
+                "Phone App",
+                () => completeTask(taskName)
+            ));
+        } else if (taskName === "Figure out what you enjoy") {
+            const card = document.createElement("section");
+            card.className = "sim-box paper";
+            card.innerHTML = `
+                <div style="font-family:Arial,sans-serif; color:#111;">
+                    <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; color:#666; margin-bottom:10px;">Retirement Planning Worksheet</div>
+                    <label style="display:block; font-size:0.75rem; font-weight:bold; margin-bottom:4px;">Activities you are curious about</label>
+                    <textarea style="width:100%; height:70px; border:1px solid #aaa; padding:6px 8px; margin-bottom:8px; font-size:0.82rem;">Painting, hiking, language classes, volunteering...</textarea>
+                    <label style="display:block; font-size:0.75rem; font-weight:bold; margin-bottom:4px;">What did you enjoy before work took over?</label>
+                    <textarea style="width:100%; height:58px; border:1px solid #aaa; padding:6px 8px; font-size:0.82rem;"></textarea>
+                </div>
+            `;
+            modalBody.appendChild(card);
+            modalBody.appendChild(createSimulationCard(
+                "New Routine Setup",
+                [{ label: "Weekly Plan", value: "Drafted", full: true }],
+                "Save",
+                "Saved. This is a beginning, not a conclusion.",
+                "Life Planner",
                 () => completeTask(taskName)
             ));
         } else if (taskName === "Remember who you used to be") {
@@ -898,7 +1491,9 @@
 
     closeModalBtn.addEventListener("click", closeTaskModal);
     taskModal.addEventListener("click", e => { if (e.target === taskModal) closeTaskModal(); });
-    window.addEventListener("keydown", e => { if (e.key === "Escape") closeTaskModal(); });
+    window.addEventListener("keydown", e => {
+        if (e.key === "Escape") closeTaskModal();
+    });
 
     // ─────────────────────────────────────────────────────────────────────────
     // BOOT
